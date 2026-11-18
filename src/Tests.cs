@@ -4,6 +4,8 @@ using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
@@ -11,6 +13,10 @@ namespace ApplePlayer {
  public static class Tests {
   static StreamWriter log;
   static void Check(bool value,string name){if(!value)throw new Exception(name);log.WriteLine("PASS "+name);log.Flush();}
+  static T Child<T>(DependencyObject parent) where T:DependencyObject {
+   for(int i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++){var child=VisualTreeHelper.GetChild(parent,i);if(child is T)return (T)child;var found=Child<T>(child);if(found!=null)return found;}return null;
+  }
+  static void Snapshot(FrameworkElement element,string path){var bitmap=new RenderTargetBitmap((int)element.ActualWidth,(int)element.ActualHeight,96,96,PixelFormats.Pbgra32);bitmap.Render(element);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using(var file=File.Create(path))encoder.Save(file);}
   public static int Run(string[] args) {
    string root=Path.GetFullPath(args.Length>0?args[0]:".local/tests");Directory.CreateDirectory(root);
    int exit=1;var app=new Application();
@@ -42,6 +48,38 @@ namespace ApplePlayer {
      p.Get<Slider>("Volume").Value=0;
      p.Window.UpdateLayout();await Task.Delay(250);
      var bmp=new RenderTargetBitmap((int)p.Window.ActualWidth,(int)p.Window.ActualHeight,96,96,PixelFormats.Pbgra32);bmp.Render(p.Window);var enc=new PngBitmapEncoder();enc.Frames.Add(BitmapFrame.Create(bmp));using(var file=File.Create(Path.Combine(root,"player.png")))enc.Save(file);Check(File.Exists(Path.Combine(root,"player.png")),"UI screenshot rendered");
+     var list=p.Get<ListBox>("Tracks");int originalCount=p.Data.Tracks.Count;
+     for(int i=0;i<70;i++)p.Data.Tracks.Add(new Track{Path=fixture,Title="Проверка прокрутки · "+(i+1).ToString("00"),Artist="Тестовая медиатека",Album="Длинный список"});
+     p.Refresh();p.Window.UpdateLayout();await Task.Delay(150);
+     var viewer=Child<ScrollViewer>(list);Check(viewer!=null&&viewer.ScrollableHeight>0,"Long playlist overflows");
+     var bar=(ScrollBar)viewer.Template.FindName("PART_VerticalScrollBar",viewer);bar.ApplyTemplate();
+     Check(bar.IsVisible&&Math.Abs(bar.ActualWidth-12)<0.1,"Slim scrollbar visible on long playlist");
+     var track=(System.Windows.Controls.Primitives.Track)bar.Template.FindName("PART_Track",bar);
+     Check(track!=null&&track.Thumb!=null&&track.DecreaseRepeatButton.Command==ScrollBar.PageUpCommand&&track.IncreaseRepeatButton.Command==ScrollBar.PageDownCommand,"Scrollbar has thumb and page areas without arrow buttons");
+     viewer.RaiseEvent(new MouseWheelEventArgs(Mouse.PrimaryDevice,Environment.TickCount,-120){RoutedEvent=Mouse.MouseWheelEvent});p.Window.UpdateLayout();
+     Check(viewer.VerticalOffset>0,"Mouse wheel scrolls long playlist");
+     viewer.ScrollToTop();p.Window.UpdateLayout();
+     ((RoutedCommand)track.IncreaseRepeatButton.Command).Execute(null,track.IncreaseRepeatButton);p.Window.UpdateLayout();
+     Check(viewer.VerticalOffset>0,"Click below thumb pages down");
+     viewer.ScrollToTop();p.Window.UpdateLayout();
+     track.Thumb.RaiseEvent(new DragStartedEventArgs(0,0){RoutedEvent=Thumb.DragStartedEvent});
+     track.Thumb.RaiseEvent(new DragDeltaEventArgs(0,80){RoutedEvent=Thumb.DragDeltaEvent});
+     track.Thumb.RaiseEvent(new DragCompletedEventArgs(0,80,false){RoutedEvent=Thumb.DragCompletedEvent});p.Window.UpdateLayout();
+     Check(viewer.VerticalOffset>0,"Dragging thumb scrolls content");
+     list.Focus();list.SelectedIndex=0;
+     list.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(p.Window),Environment.TickCount,Key.End){RoutedEvent=Keyboard.KeyDownEvent});p.Window.UpdateLayout();await Task.Delay(100);
+     Check(list.SelectedIndex==list.Items.Count-1&&viewer.VerticalOffset>0,"End key selects and reveals last track");
+     Snapshot(p.Window,Path.Combine(root,"scrollbar.png"));
+     var context=list.ContextMenu;context.PlacementTarget=list;context.IsOpen=true;await Task.Delay(100);context.UpdateLayout();
+     Check(context.Template!=null&&((MenuItem)context.Items[0]).Template!=null,"Custom playlist context menu opens");
+     Snapshot(context,Path.Combine(root,"context-menu.png"));context.IsOpen=false;
+     var search=p.Get<TextBox>("Search");search.Text="тест";search.Select(0,0);var searchMenu=search.ContextMenu;searchMenu.PlacementTarget=search;searchMenu.IsOpen=true;await Task.Delay(100);
+     var selectAll=(MenuItem)searchMenu.Items[4];((RoutedCommand)selectAll.Command).Execute(selectAll.CommandParameter,selectAll.CommandTarget);
+     Check(selectAll.CommandTarget==search&&search.SelectedText=="тест","Styled search menu preserves text commands");searchMenu.IsOpen=false;search.Text="";
+     var tip=new ToolTip{Content="Следующий трек",PlacementTarget=p.Get<Button>("NextButton")};tip.IsOpen=true;await Task.Delay(100);tip.UpdateLayout();Snapshot(tip,Path.Combine(root,"tooltip.png"));Check(tip.Template!=null,"Styled tooltip opens");tip.IsOpen=false;
+     p.Window.Width=900;p.Window.Height=640;p.Window.UpdateLayout();Check(bar.IsVisible&&viewer.ViewportHeight>0,"Scrollbar remains usable at minimum window size");
+     p.Data.Tracks.RemoveRange(originalCount,p.Data.Tracks.Count-originalCount);p.Refresh();p.Window.UpdateLayout();
+     Check(viewer.ComputedVerticalScrollBarVisibility==Visibility.Collapsed,"Scrollbar hides when playlist fits");p.Window.Width=1120;p.Window.Height=760;p.Window.UpdateLayout();
      p.Remove(p.Current);Check(p.Current==null&&!p.Playing&&File.Exists(fixture),"Removing current track stops audio and preserves file");
      p.Play(p.Data.Tracks[0]);for(int i=0;i<50&&!p.Opened;i++)await Task.Delay(100);Check(p.Opened,"Remaining track plays after removal");
      p.Window.Close();p=null;

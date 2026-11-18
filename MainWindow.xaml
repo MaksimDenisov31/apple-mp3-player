@@ -27,7 +27,12 @@
    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
    <Grid><TextBlock x:Name="PageTitle" Text="Вся музыка" FontSize="32" FontWeight="Bold"/><Button x:Name="MoreAddButton" Content="＋" Background="{StaticResource Accent}" Foreground="White" FontSize="19" HorizontalAlignment="Right" Padding="12,5" ToolTip="Добавить файлы (Ctrl+O)"/></Grid>
    <TextBlock x:Name="CountLabel" Grid.Row="1" Text="Соберите свою коллекцию" Foreground="#9595A0" Margin="1,8,0,22"/>
-   <TextBox x:Name="Search" Grid.Row="2" ToolTip="Поиск по названию, исполнителю и альбому" Margin="0,0,0,18" AutomationProperties.Name="Поиск музыки"/>
+   <TextBox x:Name="Search" Grid.Row="2" ToolTip="Поиск по названию, исполнителю и альбому" Margin="0,0,0,18" AutomationProperties.Name="Поиск музыки"><TextBox.ContextMenu><ContextMenu>
+    <MenuItem Header="Вырезать" Command="ApplicationCommands.Cut" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+    <MenuItem Header="Копировать" Command="ApplicationCommands.Copy" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+    <MenuItem Header="Вставить" Command="ApplicationCommands.Paste" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+    <Separator/><MenuItem Header="Выделить всё" Command="ApplicationCommands.SelectAll" CommandTarget="{Binding PlacementTarget, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+   </ContextMenu></TextBox.ContextMenu></TextBox>
    <Grid Grid.Row="3">
     <ListBox x:Name="Tracks" Background="Transparent" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True">
      <ListBox.ItemTemplate><DataTemplate><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="34"/><ColumnDefinition Width="*"/><ColumnDefinition Width="24"/></Grid.ColumnDefinitions><TextBlock Text="♫" Foreground="#FA3559" FontSize="21" VerticalAlignment="Center"/><StackPanel Grid.Column="1"><TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/><TextBlock Text="{Binding Subtitle}" Foreground="#90909B" FontSize="12" TextTrimming="CharacterEllipsis" Margin="0,4,0,0"/></StackPanel><TextBlock Grid.Column="2" Text="{Binding Heart}" Foreground="#FA3559" VerticalAlignment="Center"/></Grid></DataTemplate></ListBox.ItemTemplate>

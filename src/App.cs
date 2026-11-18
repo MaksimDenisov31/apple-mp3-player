@@ -14,7 +14,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Apple Player")]
-[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
 namespace ApplePlayer {
  public class Player {
   public Window Window;
@@ -33,6 +33,7 @@ namespace ApplePlayer {
   void Button(string name,Action action){Get<Button>(name).Click+=delegate{action();};}
   public Player(string path) {
    store=path;Data=Library.Load(path);
+   if(!Application.Current.Resources.Contains("AppleScrollBar"))using(var styles=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.ControlStyles.xaml"))Application.Current.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Load(styles));
    using(var s=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.MainWindow.xaml"))Window=(Window)XamlReader.Load(s);
    Button("AddButton",AddDialog);Button("MoreAddButton",AddDialog);Button("FolderButton",FolderDialog);
    Button("PlayButton",Toggle);Button("PreviousButton",Previous);Button("NextButton",delegate{Next(false);});
