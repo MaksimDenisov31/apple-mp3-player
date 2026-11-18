@@ -14,10 +14,10 @@ AppId=ApplePlayer.MaksimDenisovRussia
 #endif
 AppName=Apple Player
 AppVersion={#AppVersion}
-AppPublisher=MaksimDenisovRussia
-AppPublisherURL=https://github.com/MaksimDenisovRussia/apple-player
-AppSupportURL=https://github.com/MaksimDenisovRussia/apple-player/issues
-AppUpdatesURL=https://github.com/MaksimDenisovRussia/apple-player/releases
+AppPublisher=MaksimDenisov31
+AppPublisherURL=https://github.com/MaksimDenisov31/apple-player
+AppSupportURL=https://github.com/MaksimDenisov31/apple-player/issues
+AppUpdatesURL=https://github.com/MaksimDenisov31/apple-player/releases
 DefaultDirName={localappdata}\Programs\Apple Player
 DefaultGroupName=Apple Player
 PrivilegesRequired=lowest
