@@ -27,7 +27,7 @@ namespace ApplePlayer {
   static void Snapshot(FrameworkElement element,string path){var bitmap=new RenderTargetBitmap((int)element.ActualWidth,(int)element.ActualHeight,96,96,PixelFormats.Pbgra32);bitmap.Render(element);var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(bitmap));using(var file=File.Create(path))encoder.Save(file);}
   public static int Run(string[] args) {
    string root=Path.GetFullPath(args.Length>0?args[0]:".local/tests");Directory.CreateDirectory(root);
-   int exit=1;var app=new Application();
+   int exit=1;var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};
    log=new StreamWriter(Path.Combine(root,"results.txt"),false);
    app.Startup+=async delegate {
     Player p=null;
@@ -133,7 +133,31 @@ namespace ApplePlayer {
      var pending=p.Import(new[]{fixture,second});p.ClearLibrary();await pending;
      Check(p.Data.Tracks.Count==0&&Library.Load(state).Tracks.Count==0,"Clear cancels pending import results");
      await p.Import(new[]{fixture});Check(p.Data.Tracks.Count==1&&p.Get<Button>("ClearLibraryButton").IsEnabled,"Music can be added again after clearing");
+     double savedWidth=Math.Max(p.Window.MinWidth,Math.Min(1037,SystemParameters.WorkArea.Width));
+     double savedHeight=Math.Max(p.Window.MinHeight,Math.Min(743,SystemParameters.WorkArea.Height));
+     p.Window.Width=savedWidth;p.Window.Height=savedHeight;p.Window.UpdateLayout();await Task.Delay(650);
+     var sized=Library.Load(state);Check(Math.Abs(sized.WindowWidth-savedWidth)<1&&Math.Abs(sized.WindowHeight-savedHeight)<1,"Resize automatically persists latest normal dimensions");
      bool closed=false;p.Window.Closed+=delegate{closed=true;};p.Get<Button>("CloseWindowButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(closed&&File.Exists(state),"Red button closes window and saves library");p=null;
+     p=new Player(state);p.Window.Show();await Task.Delay(200);
+     Check(Math.Abs(p.Window.ActualWidth-savedWidth)<1&&Math.Abs(p.Window.ActualHeight-savedHeight)<1&&p.Data.Tracks.Count==1,"Reopened player restores custom size and music library");
+     p.Get<Button>("MaximizeWindowButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(650);sized=Library.Load(state);
+     Check(sized.WindowMaximized&&Math.Abs(sized.WindowWidth-savedWidth)<1&&Math.Abs(sized.WindowHeight-savedHeight)<1,"Maximize persists state while retaining normal restore dimensions");
+     p.Window.WindowState=WindowState.Minimized;await Task.Delay(500);p.Window.Close();p=null;sized=Library.Load(state);
+     Check(sized.WindowMaximized&&Math.Abs(sized.WindowWidth-savedWidth)<1,"Closing minimized player preserves previous maximized state");
+     p=new Player(state);p.Window.Show();await Task.Delay(250);
+     Check(p.Window.WindowState==WindowState.Maximized,"Player reopens maximized after minimized close");
+     p.Get<Button>("MaximizeWindowButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(600);
+     Check(p.Window.WindowState==WindowState.Normal&&Math.Abs(p.Window.ActualWidth-savedWidth)<1&&Math.Abs(p.Window.ActualHeight-savedHeight)<1,"Restore after reopening recovers custom normal dimensions");
+     p.Window.WindowState=WindowState.Minimized;p.Window.Close();p=null;
+     p=new Player(state);p.Window.Show();await Task.Delay(150);
+     Check(p.Window.WindowState==WindowState.Normal&&Math.Abs(p.Window.ActualWidth-savedWidth)<1,"Closing minimized normal player reopens in normal mode");p.Window.Close();p=null;
+     sized=Library.Load(state);sized.WindowWidth=9999;sized.WindowHeight=9999;sized.Save(state);
+     p=new Player(state);p.Window.Show();await Task.Delay(150);
+     Check(p.Window.Width<=Math.Max(p.Window.MinWidth,SystemParameters.WorkArea.Width)&&p.Window.Height<=Math.Max(p.Window.MinHeight,SystemParameters.WorkArea.Height),"Saved dimensions are clamped to current display work area");p.Window.Close();p=null;
+     string legacy=Path.Combine(root,"legacy-library.json");File.WriteAllText(legacy,"{\"Tracks\":[],\"Volume\":0.42,\"Repeat\":1,\"Shuffle\":true}");
+     p=new Player(legacy);p.Window.Show();await Task.Delay(150);
+     Check(p.Window.WindowState==WindowState.Normal&&p.Window.Width>=p.Window.MinWidth&&p.Window.Height>=p.Window.MinHeight,"Older libraries without size fields use valid defaults");
+     Check(Math.Abs(p.Data.Volume-0.42)<0.001&&p.Data.Repeat==1&&p.Data.Shuffle,"Window size migration preserves existing playback settings");p.Window.Close();p=null;
      File.WriteAllText(Path.Combine(root,"broken.mp3"),"invalid audio");Check(Tags.Read(Path.Combine(root,"broken.mp3")).Title=="broken","Malformed metadata handled");
      File.WriteAllText(Path.Combine(root,"corrupt.json"),"broken");Check(Library.Load(Path.Combine(root,"corrupt.json")).Tracks.Count==0,"Invalid settings handled");
      exit=0;log.WriteLine("ALL CHECKS PASSED");

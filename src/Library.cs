@@ -27,12 +27,18 @@ namespace ApplePlayer {
   [DataMember] public bool Shuffle;
   [DataMember] public int Repeat;
   [DataMember] public string Current;
+  [DataMember] public double WindowWidth;
+  [DataMember] public double WindowHeight;
+  [DataMember] public bool WindowMaximized;
   public static Library Load(string path) {
    try { using(var stream=File.OpenRead(path)) {
     var data=(Library)new DataContractJsonSerializer(typeof(Library)).ReadObject(stream);
     data.Tracks=(data.Tracks ?? new List<Track>()).Where(t=>t!=null && !String.IsNullOrEmpty(t.Path)).GroupBy(t=>t.Path,StringComparer.OrdinalIgnoreCase).Select(g=>g.First()).ToList();
     data.Volume=Double.IsNaN(data.Volume)?0.7:Math.Max(0,Math.Min(1,data.Volume));
-    data.Repeat=Math.Max(0,Math.Min(2,data.Repeat)); return data;
+    data.Repeat=Math.Max(0,Math.Min(2,data.Repeat));
+    if(Double.IsNaN(data.WindowWidth)||Double.IsInfinity(data.WindowWidth)||data.WindowWidth<0||data.WindowWidth>10000)data.WindowWidth=0;
+    if(Double.IsNaN(data.WindowHeight)||Double.IsInfinity(data.WindowHeight)||data.WindowHeight<0||data.WindowHeight>10000)data.WindowHeight=0;
+    return data;
    }} catch {return new Library();}
   }
   public void Save(string path) {

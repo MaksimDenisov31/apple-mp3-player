@@ -15,7 +15,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Apple Player")]
-[assembly: AssemblyVersion("1.0.3.0")]
+[assembly: AssemblyVersion("1.0.4.0")]
 namespace ApplePlayer {
  public class Player {
   public Window Window;
@@ -30,6 +30,7 @@ namespace ApplePlayer {
   public const string DefaultAppsUri="ms-settings:defaultapps?registeredAppUser=ApplePlayer";
   readonly Random random=new Random();
   readonly DispatcherTimer timer=new DispatcherTimer();
+  readonly DispatcherTimer sizeSave=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(400)};
   readonly List<Track> history=new List<Track>();
   public T Get<T>(string name) where T:class {return Window.FindName(name) as T;}
   void Label(string name,string text) {Get<TextBlock>(name).Text=text;}
@@ -40,6 +41,13 @@ namespace ApplePlayer {
    using(var s=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.MainWindow.xaml"))Window=(Window)XamlReader.Load(s);
    using(var icon=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.Icon"))Window.Icon=new IconBitmapDecoder(icon,BitmapCreateOptions.None,BitmapCacheOption.OnLoad).Frames.OrderByDescending(frame=>frame.PixelWidth).First();
    new WindowFrame(Window);
+   Rect workArea=SystemParameters.WorkArea;
+   Window.Width=Math.Max(Window.MinWidth,Math.Min(Data.WindowWidth>0?Data.WindowWidth:Window.Width,Math.Max(Window.MinWidth,workArea.Width)));
+   Window.Height=Math.Max(Window.MinHeight,Math.Min(Data.WindowHeight>0?Data.WindowHeight:Window.Height,Math.Max(Window.MinHeight,workArea.Height)));
+   if(Data.WindowMaximized)Window.WindowState=WindowState.Maximized;
+   sizeSave.Tick+=delegate{sizeSave.Stop();Save();};
+   Window.SizeChanged+=delegate{if(Window.IsLoaded&&Window.WindowState==WindowState.Normal){RememberWindowSize();sizeSave.Stop();sizeSave.Start();}};
+   Window.StateChanged+=delegate{if(Window.IsLoaded&&Window.WindowState!=WindowState.Minimized){RememberWindowSize();sizeSave.Stop();sizeSave.Start();}};
    Button("CloseWindowButton",delegate{Window.Close();});
    Button("MinimizeWindowButton",delegate{Window.WindowState=WindowState.Minimized;});
    Button("MaximizeWindowButton",delegate{Window.WindowState=Window.WindowState==WindowState.Maximized?WindowState.Normal:WindowState.Maximized;});
@@ -70,8 +78,8 @@ namespace ApplePlayer {
    Audio.MediaEnded+=delegate{Next(true);};
    Audio.MediaFailed+=delegate(object o,ExceptionEventArgs e){Playing=false;Opened=false;Audio.Close();Get<Button>("PlayButton").Content="▶";Label("Status","Не удалось воспроизвести файл. Проверьте доступность и формат.");};
    timer.Interval=TimeSpan.FromMilliseconds(250);timer.Tick+=delegate{if(!Opened)return;if(!Get<Slider>("Seek").IsMouseCaptureWithin){updating=true;Get<Slider>("Seek").Value=Audio.Position.TotalSeconds;updating=false;}Label("Elapsed",Time(Audio.Position.TotalSeconds));};timer.Start();
-   Window.Closing+=delegate(object sender,System.ComponentModel.CancelEventArgs closing){try{Data.Current=Current==null?null:Current.Path;Data.Save(store);}catch(Exception e){if(MessageBox.Show("Не удалось сохранить медиатеку: "+e.Message+"\nЗакрыть плеер?","Apple Player",MessageBoxButton.YesNo,MessageBoxImage.Warning)==MessageBoxResult.No)closing.Cancel=true;}};
-   Window.Closed+=delegate{timer.Stop();Audio.Close();};
+   Window.Closing+=delegate(object sender,System.ComponentModel.CancelEventArgs closing){try{sizeSave.Stop();RememberWindowSize();Data.Current=Current==null?null:Current.Path;Data.Save(store);}catch(Exception e){if(MessageBox.Show("Не удалось сохранить медиатеку: "+e.Message+"\nЗакрыть плеер?","Apple Player",MessageBoxButton.YesNo,MessageBoxImage.Warning)==MessageBoxResult.No)closing.Cancel=true;}};
+   Window.Closed+=delegate{timer.Stop();sizeSave.Stop();Audio.Close();};
    Current=Data.Tracks.FirstOrDefault(t=>t.Path==Data.Current);if(Current!=null)ShowTrack();Refresh();Modes();
   }
   public static string Time(double seconds){var t=TimeSpan.FromSeconds(Math.Max(0,seconds));return ((int)t.TotalMinutes)+":"+t.Seconds.ToString("00");}
@@ -138,7 +146,13 @@ namespace ApplePlayer {
   }
   static Brush Brush(string hex){return (Brush)new BrushConverter().ConvertFromString(hex);}
   void Modes(){Get<Button>("ShuffleButton").Foreground=Brush(Data.Shuffle?"#FA3559":"#565661");Get<Button>("ShuffleButton").Background=Brush(Data.Shuffle?"#FDE7ED":"#00000000");Get<Button>("RepeatButton").Foreground=Brush(Data.Repeat>0?"#FA3559":"#565661");Get<Button>("RepeatButton").Content=Data.Repeat==2?"↻₁":"↻";Get<Button>("RepeatButton").ToolTip="Повтор: "+(Data.Repeat==0?"выключен":Data.Repeat==1?"все треки":"один трек");}
-  void Save(){try{Data.Current=Current==null?null:Current.Path;Data.Save(store);}catch(Exception e){Label("Status","Не удалось сохранить медиатеку: "+e.Message);}}
+  public void RememberWindowSize(){
+   if(!Window.IsLoaded||Window.WindowState==WindowState.Minimized)return;
+   Rect bounds=Window.WindowState==WindowState.Maximized?Window.RestoreBounds:new Rect(0,0,Window.ActualWidth,Window.ActualHeight);
+   if(!bounds.IsEmpty&&bounds.Width>=Window.MinWidth&&bounds.Height>=Window.MinHeight){Data.WindowWidth=bounds.Width;Data.WindowHeight=bounds.Height;}
+   Data.WindowMaximized=Window.WindowState==WindowState.Maximized;
+  }
+  void Save(){try{RememberWindowSize();Data.Current=Current==null?null:Current.Path;Data.Save(store);}catch(Exception e){Label("Status","Не удалось сохранить медиатеку: "+e.Message);}}
   void Keys(object o,KeyEventArgs e){
    if(Get<Border>("ClearLibraryOverlay").Visibility==Visibility.Visible){if(e.Key==Key.Escape){CancelClearLibrary();e.Handled=true;}return;}
    if(e.Key==Key.O && Keyboard.Modifiers==ModifierKeys.Control){AddDialog();e.Handled=true;}else if(e.Key==Key.Right&&Keyboard.Modifiers==ModifierKeys.Control){Next(false);e.Handled=true;}else if(e.Key==Key.Left&&Keyboard.Modifiers==ModifierKeys.Control){Previous();e.Handled=true;}else if(e.Key==Key.Space && !(Keyboard.FocusedElement is TextBox) && !(Keyboard.FocusedElement is Button)){Toggle();e.Handled=true;}else if(e.Key==Key.Delete && Keyboard.FocusedElement==Get<ListBox>("Tracks")){Remove(Get<ListBox>("Tracks").SelectedItem as Track);e.Handled=true;}
