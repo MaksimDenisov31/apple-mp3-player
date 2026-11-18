@@ -39,8 +39,10 @@
      <Button x:Name="FavoritesButton" Content="♡    Избранное" Margin="0,0,0,28"/>
      <TextBlock Text="ДОБАВИТЬ МУЗЫКУ" FontSize="10" Foreground="#93939E" FontWeight="Bold" Margin="10,0,0,12"/>
      <Button x:Name="AddButton" Content="＋    Выбрать файлы"/><Button x:Name="FolderButton" Content="▱    Выбрать папку"/>
+     <Button x:Name="DefaultAppsButton" Content="Плеер по умолчанию" FontSize="12" Margin="0,14,0,0" ToolTip="Открыть настройки приложений Windows"/>
+     <Button x:Name="ClearLibraryButton" Content="Очистить медиатеку" Foreground="#C84865" FontSize="12" Margin="0,4,0,0" ToolTip="Убрать все треки из плеера. Файлы останутся на диске."/>
     </StackPanel>
-    <StackPanel VerticalAlignment="Bottom"><TextBlock Text="Ваша музыка.&#x0a;Ваш ритм." Foreground="#93939E" FontSize="16" LineHeight="24"/><TextBlock Text="Локально · Без рекламы" Foreground="#A2A2AC" FontSize="10" Margin="0,12,0,0"/></StackPanel>
+    <StackPanel VerticalAlignment="Bottom"><TextBlock Text="Локально · Без рекламы" Foreground="#A2A2AC" FontSize="10" Margin="0,12,0,0"/></StackPanel>
    </DockPanel>
   </Border>
   <Grid Grid.Column="1" Margin="30,30,24,12">
@@ -79,5 +81,13 @@
     <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center"><Button x:Name="MuteButton" Content="♪" FontSize="19" ToolTip="Выключить звук"/><Slider x:Name="Volume" Width="125" Minimum="0" Maximum="1" Value="0.7" IsMoveToPointEnabled="True" VerticalAlignment="Center" AutomationProperties.Name="Громкость"/></StackPanel>
    </Grid>
   </Border>
- </Grid></Grid></Border>
+ </Grid>
+ <Border x:Name="ClearLibraryOverlay" Grid.RowSpan="2" Panel.ZIndex="20" Background="#99000000" Visibility="Collapsed" KeyboardNavigation.TabNavigation="Cycle" KeyboardNavigation.ControlTabNavigation="Cycle">
+  <Border Background="#FAFAFC" BorderBrush="#E2E2EB" BorderThickness="1" CornerRadius="20" Padding="30" Width="420" HorizontalAlignment="Center" VerticalAlignment="Center">
+   <StackPanel><TextBlock Text="Очистить медиатеку?" FontSize="24" FontWeight="SemiBold"/><TextBlock Text="Все добавленные треки и избранное будут убраны из плеера. Музыкальные файлы останутся на диске." FontSize="14" Foreground="#777784" TextWrapping="Wrap" Margin="0,16,0,24"/>
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right"><Button x:Name="CancelClearLibraryButton" Content="Отмена" Background="#EDEDF3" Margin="0,0,10,0"/><Button x:Name="ConfirmClearLibraryButton" Content="Очистить" Background="#FA3559" Foreground="White"/></StackPanel>
+   </StackPanel>
+  </Border>
+ </Border>
+ </Grid></Border>
 </Window>

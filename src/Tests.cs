@@ -105,6 +105,34 @@ namespace ApplePlayer {
      Check(viewer.ComputedVerticalScrollBarVisibility==Visibility.Collapsed,"Scrollbar hides when playlist fits");p.Window.Width=1120;p.Window.Height=806;p.Window.UpdateLayout();
      p.Remove(p.Current);Check(p.Current==null&&!p.Playing&&File.Exists(fixture),"Removing current track stops audio and preserves file");
      p.Play(p.Data.Tracks[0]);for(int i=0;i<50&&!p.Opened;i++)await Task.Delay(100);Check(p.Opened,"Remaining track plays after removal");
+     foreach(string extension in AudioFormats.Extensions.Where(x=>x!=".mp3")){
+      string audioPath=Path.Combine(root,"sample"+extension);int count=p.Data.Tracks.Count;await p.Import(new[]{audioPath});
+      Check(p.Data.Tracks.Count==count+1,"Import supported audio "+extension);p.Play(p.Data.Tracks.Last());
+      for(int i=0;i<50&&!p.Opened;i++)await Task.Delay(100);await Task.Delay(250);
+      Check(p.Opened&&p.Audio.Position.TotalSeconds>0.1,"Playback advances for "+extension);p.Toggle();
+     }
+     Check(Player.DefaultAppsUri=="ms-settings:defaultapps?registeredAppUser=ApplePlayer"&&p.Get<Button>("DefaultAppsButton")!=null,"Default player button targets registered per-user app");
+     p.Toggle();int beforeClear=p.Data.Tracks.Count;p.Get<Button>("ClearLibraryButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+     Check(p.Get<Border>("ClearLibraryOverlay").Visibility==Visibility.Visible&&p.Data.Tracks.Count==beforeClear,"Clear button asks for confirmation without removing tracks");
+     p.Window.UpdateLayout();await Task.Delay(150);Snapshot(p.Window,Path.Combine(root,"clear-library.png"));
+     p.Get<Button>("CancelClearLibraryButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+     Check(p.Data.Tracks.Count==beforeClear&&p.Playing&&p.Get<Border>("ClearLibraryOverlay").Visibility==Visibility.Collapsed,"Cancel clear preserves library and playback");
+     p.Get<Button>("ClearLibraryButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+     p.Window.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(p.Window),Environment.TickCount,Key.Escape){RoutedEvent=Keyboard.PreviewKeyDownEvent});
+     Check(p.Data.Tracks.Count==beforeClear&&p.Get<Border>("ClearLibraryOverlay").Visibility==Visibility.Collapsed,"Escape cancels library clear");
+     p.Get<Button>("FavoritesButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));p.Get<TextBox>("Search").Text="Apple";
+     p.Get<Slider>("Volume").Value=0.31;double volume=p.Data.Volume;int repeat=p.Data.Repeat;
+     p.Get<Button>("ClearLibraryButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));p.Get<Button>("ConfirmClearLibraryButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+     Check(p.Data.Tracks.Count==0&&p.Current==null&&!p.Playing&&!p.Opened,"Confirm clears entire library and stops playback");
+     Check(p.Visible().Count==0&&p.Get<TextBox>("Search").Text==""&&p.Get<TextBlock>("Elapsed").Text=="0:00"&&p.Get<Image>("Cover").Source==null,"Clear resets filtered list search position and cover");
+     Check(File.Exists(fixture)&&File.Exists(second)&&AudioFormats.Extensions.All(x=>File.Exists(Path.Combine(root,"sample"+x))),"Clear preserves original audio files");
+     Check(Math.Abs(p.Data.Volume-volume)<0.001&&p.Data.Repeat==repeat,"Clear preserves playback preferences");
+     var emptyLibrary=Library.Load(state);Check(emptyLibrary.Tracks.Count==0&&emptyLibrary.Current==null,"Empty library persisted to disk");
+     p.Previous();p.Next(false);p.Toggle();Check(p.Current==null&&!p.Playing,"Cleared playback history cannot restore old tracks");
+     Check(!p.Get<Button>("ClearLibraryButton").IsEnabled,"Clear button disabled for empty library");
+     var pending=p.Import(new[]{fixture,second});p.ClearLibrary();await pending;
+     Check(p.Data.Tracks.Count==0&&Library.Load(state).Tracks.Count==0,"Clear cancels pending import results");
+     await p.Import(new[]{fixture});Check(p.Data.Tracks.Count==1&&p.Get<Button>("ClearLibraryButton").IsEnabled,"Music can be added again after clearing");
      bool closed=false;p.Window.Closed+=delegate{closed=true;};p.Get<Button>("CloseWindowButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(closed&&File.Exists(state),"Red button closes window and saves library");p=null;
      File.WriteAllText(Path.Combine(root,"broken.mp3"),"invalid audio");Check(Tags.Read(Path.Combine(root,"broken.mp3")).Title=="broken","Malformed metadata handled");
      File.WriteAllText(Path.Combine(root,"corrupt.json"),"broken");Check(Library.Load(Path.Combine(root,"corrupt.json")).Tracks.Count==0,"Invalid settings handled");

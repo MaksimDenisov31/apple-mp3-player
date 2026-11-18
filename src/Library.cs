@@ -7,6 +7,11 @@ using System.Runtime.Serialization.Json;
 using System.Text;
 
 namespace ApplePlayer {
+ public static class AudioFormats {
+  public static readonly string[] Extensions={".mp3",".wav",".m4a",".aac",".wma",".flac"};
+  public static bool Supports(string path){return Extensions.Contains(System.IO.Path.GetExtension(path),StringComparer.OrdinalIgnoreCase);}
+  public static string Filter {get{return "Музыка (MP3, WAV, M4A, AAC, WMA, FLAC)|"+String.Join(";",Extensions.Select(e=>"*"+e));}}
+ }
  [DataContract] public class Track {
   [DataMember] public string Path {get;set;}
   [DataMember] public string Title {get;set;}

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -14,7 +15,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Apple Player")]
-[assembly: AssemblyVersion("1.0.2.0")]
+[assembly: AssemblyVersion("1.0.3.0")]
 namespace ApplePlayer {
  public class Player {
   public Window Window;
@@ -25,6 +26,8 @@ namespace ApplePlayer {
   public bool Opened;
   readonly string store;
   bool updating, favorites, importing;
+  int importRevision;
+  public const string DefaultAppsUri="ms-settings:defaultapps?registeredAppUser=ApplePlayer";
   readonly Random random=new Random();
   readonly DispatcherTimer timer=new DispatcherTimer();
   readonly List<Track> history=new List<Track>();
@@ -41,6 +44,10 @@ namespace ApplePlayer {
    Button("MinimizeWindowButton",delegate{Window.WindowState=WindowState.Minimized;});
    Button("MaximizeWindowButton",delegate{Window.WindowState=Window.WindowState==WindowState.Maximized?WindowState.Normal:WindowState.Maximized;});
    Button("AddButton",AddDialog);Button("MoreAddButton",AddDialog);Button("FolderButton",FolderDialog);
+   Button("DefaultAppsButton",OpenDefaultApps);
+   Button("ClearLibraryButton",delegate{Get<Border>("ClearLibraryOverlay").Visibility=Visibility.Visible;Get<Button>("CancelClearLibraryButton").Focus();});
+   Button("CancelClearLibraryButton",CancelClearLibrary);
+   Button("ConfirmClearLibraryButton",ClearLibrary);
    Button("PlayButton",Toggle);Button("PreviousButton",Previous);Button("NextButton",delegate{Next(false);});
    Button("LibraryButton",delegate{favorites=false;Refresh();});Button("FavoritesButton",delegate{favorites=true;Refresh();});
    Button("HeartButton",delegate{Favorite(Current);});
@@ -73,26 +80,28 @@ namespace ApplePlayer {
    var selected=Get<ListBox>("Tracks").SelectedItem;var list=Visible();Get<ListBox>("Tracks").ItemsSource=list;Get<ListBox>("Tracks").SelectedItem=selected;
    Get<StackPanel>("Empty").Visibility=list.Count==0?Visibility.Visible:Visibility.Collapsed;
    Label("PageTitle",favorites?"Избранное":"Вся музыка");Label("CountLabel",list.Count+" треков · Ваша личная коллекция");
-   Label("EmptyTitle",Data.Tracks.Count==0?"Здесь будет ваша музыка":"Треки не найдены");Label("EmptyHint",Data.Tracks.Count==0?"Перетащите MP3 сюда или добавьте файлы":"Измените поиск или добавьте треки в избранное");
+   Label("EmptyTitle",Data.Tracks.Count==0?"Здесь будет ваша музыка":"Треки не найдены");Label("EmptyHint",Data.Tracks.Count==0?"Перетащите музыку сюда или добавьте файлы":"Измените поиск или добавьте треки в избранное");
    Get<Button>("LibraryButton").Background=Brush(favorites?"#00000000":"#E3E3EB");Get<Button>("FavoritesButton").Background=Brush(favorites?"#E3E3EB":"#00000000");
+   Get<Button>("ClearLibraryButton").IsEnabled=Data.Tracks.Count>0||importing;
   }
   public async Task Import(IEnumerable<string> paths) {
-   if(importing){Label("Status","Дождитесь завершения добавления файлов.");return;}importing=true;Label("Status","Добавляем музыку…");
+   if(importing){Label("Status","Дождитесь завершения добавления файлов.");return;}importing=true;int revision=importRevision;Get<Button>("ClearLibraryButton").IsEnabled=true;Label("Status","Добавляем музыку…");
    try {
     var input=paths.ToArray();var result=await Task.Run(delegate{
      var tracks=new List<Track>();var files=new List<string>();
      foreach(string p in input) {if(Directory.Exists(p))Collect(p,files);else if(File.Exists(p))files.Add(p);}
-     foreach(string p in files.Distinct(StringComparer.OrdinalIgnoreCase))if(String.Equals(Path.GetExtension(p),".mp3",StringComparison.OrdinalIgnoreCase))tracks.Add(Tags.Read(p));return tracks;
+     foreach(string p in files.Distinct(StringComparer.OrdinalIgnoreCase))if(AudioFormats.Supports(p))tracks.Add(Tags.Read(p));return tracks;
     });
+    if(revision!=importRevision)return;
     var known=new HashSet<string>(Data.Tracks.Select(t=>t.Path),StringComparer.OrdinalIgnoreCase);int count=0;foreach(var t in result)if(known.Add(t.Path)){Data.Tracks.Add(t);count++;}
     Refresh();Label("Status","Добавлено треков: "+count+". Двойной щелчок — воспроизведение.");Save();
-   }catch(Exception e){Label("Status","Не удалось добавить музыку: "+e.Message);}finally{importing=false;}
+   }catch(Exception e){Label("Status","Не удалось добавить музыку: "+e.Message);}finally{importing=false;Get<Button>("ClearLibraryButton").IsEnabled=Data.Tracks.Count>0;}
   }
   static void Collect(string path,List<string> files) {
-   try {files.AddRange(Directory.GetFiles(path,"*.mp3"));foreach(string d in Directory.GetDirectories(path))if((File.GetAttributes(d)&FileAttributes.ReparsePoint)==0)Collect(d,files);}catch(IOException){}catch(UnauthorizedAccessException){}
+   try {files.AddRange(Directory.GetFiles(path).Where(AudioFormats.Supports));foreach(string d in Directory.GetDirectories(path))if((File.GetAttributes(d)&FileAttributes.ReparsePoint)==0)Collect(d,files);}catch(IOException){}catch(UnauthorizedAccessException){}
   }
-  async void AddDialog(){var d=new OpenFileDialog{Filter="MP3-аудио (*.mp3)|*.mp3",Multiselect=true,Title="Добавить музыку"};if(d.ShowDialog(Window)==true)await Import(d.FileNames);}
-  async void FolderDialog(){using(var d=new System.Windows.Forms.FolderBrowserDialog{Description="Выберите папку с MP3 — вложенные папки тоже будут добавлены"})if(d.ShowDialog()==System.Windows.Forms.DialogResult.OK)await Import(new[]{d.SelectedPath});}
+  async void AddDialog(){var d=new OpenFileDialog{Filter=AudioFormats.Filter,Multiselect=true,Title="Добавить музыку"};if(d.ShowDialog(Window)==true)await Import(d.FileNames);}
+  async void FolderDialog(){using(var d=new System.Windows.Forms.FolderBrowserDialog{Description="Выберите папку с музыкой — вложенные папки тоже будут добавлены"})if(d.ShowDialog()==System.Windows.Forms.DialogResult.OK)await Import(new[]{d.SelectedPath});}
   public void Play(Track track) {
    if(!File.Exists(track.Path)){Label("Status","Файл недоступен. Возможно, он перемещён или диск отключён.");return;}
    Audio.Close();Opened=false;Current=track;Playing=true;Data.Current=track.Path;updating=true;Get<Slider>("Seek").Value=0;updating=false;Label("Elapsed","0:00");Label("Duration","0:00");
@@ -114,6 +123,15 @@ namespace ApplePlayer {
   }
   public void Previous(){if(Current==null){Toggle();return;}if(Opened&&Audio.Position.TotalSeconds>3){Audio.Position=TimeSpan.Zero;return;}if(history.Count>0){var last=history[history.Count-1];history.RemoveAt(history.Count-1);Play(last);return;}var list=Visible();if(list.Count==0)return;int i=list.IndexOf(Current);Play(list[(i-1+list.Count)%list.Count]);}
   public void Favorite(Track t){if(t==null)return;t.Favorite=!t.Favorite;Refresh();if(t==Current)ShowTrack();Save();}
+  public void CancelClearLibrary(){Get<Border>("ClearLibraryOverlay").Visibility=Visibility.Collapsed;Get<Button>("ClearLibraryButton").Focus();}
+  public void ClearLibrary(){
+   importRevision++;Audio.Close();Playing=false;Opened=false;Current=null;history.Clear();Data.Tracks.Clear();Data.Current=null;
+   favorites=false;Get<TextBox>("Search").Text="";Get<Button>("PlayButton").Content="▶";
+   updating=true;Get<Slider>("Seek").Value=0;Get<Slider>("Seek").Maximum=1;updating=false;Label("Elapsed","0:00");Label("Duration","0:00");
+   ShowTrack();Refresh();Get<Border>("ClearLibraryOverlay").Visibility=Visibility.Collapsed;
+   Get<Button>("AddButton").Focus();Label("Status","Медиатека очищена. Музыкальные файлы сохранены на диске.");Save();
+  }
+  public void OpenDefaultApps(){try{Process.Start(new ProcessStartInfo(DefaultAppsUri){UseShellExecute=true});Label("Status","В настройках Windows выберите Apple Player для музыкальных файлов и подтвердите выбор.");}catch(Exception e){Label("Status","Откройте Параметры Windows → Приложения → Приложения по умолчанию. "+e.Message);}}
   public void Remove(Track t){if(t==null)return;if(t==Current){Audio.Close();Current=null;Playing=false;Opened=false;Get<Button>("PlayButton").Content="▶";ShowTrack();updating=true;Get<Slider>("Seek").Value=0;updating=false;Label("Elapsed","0:00");Label("Duration","0:00");}Data.Tracks.Remove(t);history.RemoveAll(x=>x==t);Refresh();Save();Label("Status","Трек убран из медиатеки. Файл сохранён на диске.");}
   void ShowTrack(){Label("NowTitle",Current==null?"Поймайте настроение":Current.Title);Label("NowArtist",Current==null?"Выберите любимый трек":Current.Artist);Label("NowAlbum",Current==null?"":Current.Album);Label("MiniTitle",Current==null?"Музыка начинается здесь":Current.Title);Label("MiniArtist",Current==null?"Добавьте первый трек":Current.Artist);Get<Button>("HeartButton").Content=Current!=null&&Current.Favorite?"♥   В избранном":"♡   В избранное";Get<Image>("Cover").Source=null;
    if(Current!=null)try{byte[] bytes=Tags.Cover(Current.Path);if(bytes!=null)using(var s=new MemoryStream(bytes)){var img=new BitmapImage();img.BeginInit();img.CacheOption=BitmapCacheOption.OnLoad;img.DecodePixelWidth=600;img.StreamSource=s;img.EndInit();img.Freeze();Get<Image>("Cover").Source=img;}}catch{}
@@ -121,7 +139,10 @@ namespace ApplePlayer {
   static Brush Brush(string hex){return (Brush)new BrushConverter().ConvertFromString(hex);}
   void Modes(){Get<Button>("ShuffleButton").Foreground=Brush(Data.Shuffle?"#FA3559":"#565661");Get<Button>("ShuffleButton").Background=Brush(Data.Shuffle?"#FDE7ED":"#00000000");Get<Button>("RepeatButton").Foreground=Brush(Data.Repeat>0?"#FA3559":"#565661");Get<Button>("RepeatButton").Content=Data.Repeat==2?"↻₁":"↻";Get<Button>("RepeatButton").ToolTip="Повтор: "+(Data.Repeat==0?"выключен":Data.Repeat==1?"все треки":"один трек");}
   void Save(){try{Data.Current=Current==null?null:Current.Path;Data.Save(store);}catch(Exception e){Label("Status","Не удалось сохранить медиатеку: "+e.Message);}}
-  void Keys(object o,KeyEventArgs e){if(e.Key==Key.O && Keyboard.Modifiers==ModifierKeys.Control){AddDialog();e.Handled=true;}else if(e.Key==Key.Right&&Keyboard.Modifiers==ModifierKeys.Control){Next(false);e.Handled=true;}else if(e.Key==Key.Left&&Keyboard.Modifiers==ModifierKeys.Control){Previous();e.Handled=true;}else if(e.Key==Key.Space && !(Keyboard.FocusedElement is TextBox) && !(Keyboard.FocusedElement is Button)){Toggle();e.Handled=true;}else if(e.Key==Key.Delete && Keyboard.FocusedElement==Get<ListBox>("Tracks")){Remove(Get<ListBox>("Tracks").SelectedItem as Track);e.Handled=true;}}
+  void Keys(object o,KeyEventArgs e){
+   if(Get<Border>("ClearLibraryOverlay").Visibility==Visibility.Visible){if(e.Key==Key.Escape){CancelClearLibrary();e.Handled=true;}return;}
+   if(e.Key==Key.O && Keyboard.Modifiers==ModifierKeys.Control){AddDialog();e.Handled=true;}else if(e.Key==Key.Right&&Keyboard.Modifiers==ModifierKeys.Control){Next(false);e.Handled=true;}else if(e.Key==Key.Left&&Keyboard.Modifiers==ModifierKeys.Control){Previous();e.Handled=true;}else if(e.Key==Key.Space && !(Keyboard.FocusedElement is TextBox) && !(Keyboard.FocusedElement is Button)){Toggle();e.Handled=true;}else if(e.Key==Key.Delete && Keyboard.FocusedElement==Get<ListBox>("Tracks")){Remove(Get<ListBox>("Tracks").SelectedItem as Track);e.Handled=true;}
+  }
  }
  public static class Program {
   [STAThread] public static int Main(string[] args) {
