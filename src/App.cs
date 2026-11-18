@@ -14,7 +14,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Apple Player")]
-[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyVersion("1.0.2.0")]
 namespace ApplePlayer {
  public class Player {
   public Window Window;
@@ -35,6 +35,11 @@ namespace ApplePlayer {
    store=path;Data=Library.Load(path);
    if(!Application.Current.Resources.Contains("AppleScrollBar"))using(var styles=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.ControlStyles.xaml"))Application.Current.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Load(styles));
    using(var s=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.MainWindow.xaml"))Window=(Window)XamlReader.Load(s);
+   using(var icon=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.Icon"))Window.Icon=new IconBitmapDecoder(icon,BitmapCreateOptions.None,BitmapCacheOption.OnLoad).Frames.OrderByDescending(frame=>frame.PixelWidth).First();
+   new WindowFrame(Window);
+   Button("CloseWindowButton",delegate{Window.Close();});
+   Button("MinimizeWindowButton",delegate{Window.WindowState=WindowState.Minimized;});
+   Button("MaximizeWindowButton",delegate{Window.WindowState=Window.WindowState==WindowState.Maximized?WindowState.Normal:WindowState.Maximized;});
    Button("AddButton",AddDialog);Button("MoreAddButton",AddDialog);Button("FolderButton",FolderDialog);
    Button("PlayButton",Toggle);Button("PreviousButton",Previous);Button("NextButton",delegate{Next(false);});
    Button("LibraryButton",delegate{favorites=false;Refresh();});Button("FavoritesButton",delegate{favorites=true;Refresh();});

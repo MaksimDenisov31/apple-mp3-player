@@ -1,17 +1,25 @@
 using System;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Shell;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
 namespace ApplePlayer {
  public static class Tests {
   static StreamWriter log;
+  [StructLayout(LayoutKind.Sequential)]struct NativeRect{public int Left,Top,Right,Bottom;}
+  [DllImport("user32.dll")]static extern IntPtr SendMessage(IntPtr hwnd,int message,IntPtr wParam,IntPtr lParam);
+  [DllImport("user32.dll")]static extern bool GetWindowRect(IntPtr hwnd,out NativeRect rect);
+  static IntPtr Position(Point point){return new IntPtr(((int)point.X&65535)|(((int)point.Y&65535)<<16));}
+  static int HitTest(Window window,double x,double y){return SendMessage(new WindowInteropHelper(window).Handle,0x84,IntPtr.Zero,Position(window.PointToScreen(new Point(x,y)))).ToInt32();}
   static void Check(bool value,string name){if(!value)throw new Exception(name);log.WriteLine("PASS "+name);log.Flush();}
   static T Child<T>(DependencyObject parent) where T:DependencyObject {
    for(int i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++){var child=VisualTreeHelper.GetChild(parent,i);if(child is T)return (T)child;var found=Child<T>(child);if(found!=null)return found;}return null;
@@ -28,6 +36,21 @@ namespace ApplePlayer {
      var tag=Tags.Read(fixture);Check(tag.Title=="Тестовый трек"&&tag.Artist=="Apple Player Test"&&tag.Album=="Проверка", "ID3 UTF-8/UTF-16 metadata");Check(Tags.Cover(fixture)!=null,"Embedded cover parsed");
      string state=Path.Combine(root,"test-library.json");if(File.Exists(state))File.Move(state,state+"."+Guid.NewGuid()+".old");
      p=new Player(state);p.Window.Show();await Task.Delay(300);
+     var chrome=WindowChrome.GetWindowChrome(p.Window);
+     Check(p.Window.WindowStyle==WindowStyle.None&&chrome!=null&&!chrome.UseAeroCaptionButtons,"Native caption replaced by custom Apple title bar");
+     Check(p.Window.Icon is BitmapSource&&((BitmapSource)p.Window.Icon).PixelWidth==256,"Window uses full-resolution embedded music icon");
+     using(var icon=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.Icon")){var decoder=new IconBitmapDecoder(icon,BitmapCreateOptions.None,BitmapCacheOption.OnLoad);Check(decoder.Frames.Count==9&&decoder.Frames.Any(f=>f.PixelWidth==16)&&decoder.Frames.Any(f=>f.PixelWidth==256),"Music ICO includes nine sizes from 16 to 256 pixels");}
+     Check(HitTest(p.Window,300,23)==2,"Custom title bar supports native window dragging");
+     Check(HitTest(p.Window,29,23)==1,"Traffic light buttons receive client clicks");
+     Check(HitTest(p.Window,2,200)==10&&HitTest(p.Window,p.Window.ActualWidth-2,p.Window.ActualHeight-2)==17,"Native edge and corner resizing remain available");
+     double previousWidth=p.Window.ActualWidth,previousHeight=p.Window.ActualHeight;
+     p.Get<Button>("MinimizeWindowButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(150);Check(p.Window.WindowState==WindowState.Minimized,"Yellow button minimizes");p.Window.WindowState=WindowState.Normal;await Task.Delay(150);
+     p.Get<Button>("MaximizeWindowButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(200);Check(p.Window.WindowState==WindowState.Maximized,"Green button maximizes");
+     NativeRect bounds;var hwnd=new WindowInteropHelper(p.Window).Handle;GetWindowRect(hwnd,out bounds);var work=System.Windows.Forms.Screen.FromHandle(hwnd).WorkingArea;
+     Check(Math.Abs(bounds.Left-work.Left)<=1&&Math.Abs(bounds.Top-work.Top)<=1&&Math.Abs(bounds.Right-work.Right)<=1&&Math.Abs(bounds.Bottom-work.Bottom)<=1,"Maximized window fits monitor work area without covering taskbar");
+     p.Get<Button>("MaximizeWindowButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(150);Check(p.Window.WindowState==WindowState.Normal&&Math.Abs(p.Window.ActualWidth-previousWidth)<1&&Math.Abs(p.Window.ActualHeight-previousHeight)<1,"Green button restores original window size");
+     SendMessage(hwnd,0xA3,new IntPtr(2),Position(p.Window.PointToScreen(new Point(300,23))));await Task.Delay(150);Check(p.Window.WindowState==WindowState.Maximized,"Double-click on custom title bar maximizes");
+     SendMessage(hwnd,0xA3,new IntPtr(2),Position(p.Window.PointToScreen(new Point(300,23))));await Task.Delay(150);Check(p.Window.WindowState==WindowState.Normal,"Double-click restores window");
      Check(p.Data.Tracks.Count==0,"Fresh empty library");
      await p.Import(new[]{fixture,fixture});Check(p.Data.Tracks.Count==1,"Import and duplicate prevention");
      string second=Path.Combine(root,"second.mp3");File.Copy(fixture,second,true);await p.Import(new[]{second});Check(p.Data.Tracks.Count==2,"Add second MP3");
@@ -77,12 +100,12 @@ namespace ApplePlayer {
      var selectAll=(MenuItem)searchMenu.Items[4];((RoutedCommand)selectAll.Command).Execute(selectAll.CommandParameter,selectAll.CommandTarget);
      Check(selectAll.CommandTarget==search&&search.SelectedText=="тест","Styled search menu preserves text commands");searchMenu.IsOpen=false;search.Text="";
      var tip=new ToolTip{Content="Следующий трек",PlacementTarget=p.Get<Button>("NextButton")};tip.IsOpen=true;await Task.Delay(100);tip.UpdateLayout();Snapshot(tip,Path.Combine(root,"tooltip.png"));Check(tip.Template!=null,"Styled tooltip opens");tip.IsOpen=false;
-     p.Window.Width=900;p.Window.Height=640;p.Window.UpdateLayout();Check(bar.IsVisible&&viewer.ViewportHeight>0,"Scrollbar remains usable at minimum window size");
+     p.Window.Width=p.Window.MinWidth;p.Window.Height=p.Window.MinHeight;p.Window.UpdateLayout();Check(bar.IsVisible&&viewer.ViewportHeight>0,"Scrollbar remains usable at minimum window size");
      p.Data.Tracks.RemoveRange(originalCount,p.Data.Tracks.Count-originalCount);p.Refresh();p.Window.UpdateLayout();
-     Check(viewer.ComputedVerticalScrollBarVisibility==Visibility.Collapsed,"Scrollbar hides when playlist fits");p.Window.Width=1120;p.Window.Height=760;p.Window.UpdateLayout();
+     Check(viewer.ComputedVerticalScrollBarVisibility==Visibility.Collapsed,"Scrollbar hides when playlist fits");p.Window.Width=1120;p.Window.Height=806;p.Window.UpdateLayout();
      p.Remove(p.Current);Check(p.Current==null&&!p.Playing&&File.Exists(fixture),"Removing current track stops audio and preserves file");
      p.Play(p.Data.Tracks[0]);for(int i=0;i<50&&!p.Opened;i++)await Task.Delay(100);Check(p.Opened,"Remaining track plays after removal");
-     p.Window.Close();p=null;
+     bool closed=false;p.Window.Closed+=delegate{closed=true;};p.Get<Button>("CloseWindowButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(closed&&File.Exists(state),"Red button closes window and saves library");p=null;
      File.WriteAllText(Path.Combine(root,"broken.mp3"),"invalid audio");Check(Tags.Read(Path.Combine(root,"broken.mp3")).Title=="broken","Malformed metadata handled");
      File.WriteAllText(Path.Combine(root,"corrupt.json"),"broken");Check(Library.Load(Path.Combine(root,"corrupt.json")).Tracks.Count==0,"Invalid settings handled");
      exit=0;log.WriteLine("ALL CHECKS PASSED");
