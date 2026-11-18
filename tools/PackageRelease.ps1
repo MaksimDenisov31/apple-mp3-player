@@ -2,8 +2,8 @@
 Set-Location (Join-Path $PSScriptRoot '..')
 & cmd /c BuildInstaller.bat
 if ($LASTEXITCODE -ne 0) { throw 'Release build failed' }
-Compress-Archive -LiteralPath @('bin\ApplePlayer.exe','README.md','docs') -DestinationPath 'installer-output\ApplePlayer-Portable-1.0.4.zip' -Force
-$lines = foreach ($name in @('ApplePlayer-Setup-1.0.4.exe','ApplePlayer-Portable-1.0.4.zip')) {
+Compress-Archive -LiteralPath @('bin\AppleMP3Player.exe','README.md','docs') -DestinationPath 'installer-output\AppleMP3Player-Portable-1.1.0.zip' -Force
+$lines = foreach ($name in @('AppleMP3Player-Setup-1.1.0.exe','AppleMP3Player-Portable-1.1.0.zip')) {
  $hash = (Get-FileHash (Join-Path 'installer-output' $name) -Algorithm SHA256).Hash.ToLowerInvariant()
  "$hash  $name"
 }

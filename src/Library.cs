@@ -30,6 +30,7 @@ namespace ApplePlayer {
   [DataMember] public double WindowWidth;
   [DataMember] public double WindowHeight;
   [DataMember] public bool WindowMaximized;
+  [DataMember] public bool Dark;
   public static Library Load(string path) {
    try { using(var stream=File.OpenRead(path)) {
     var data=(Library)new DataContractJsonSerializer(typeof(Library)).ReadObject(stream);

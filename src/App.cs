@@ -14,8 +14,9 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
 
-[assembly: AssemblyTitle("Apple Player")]
-[assembly: AssemblyVersion("1.0.4.0")]
+[assembly: AssemblyTitle("Apple MP3 Player")]
+[assembly: AssemblyProduct("Apple MP3 Player")]
+[assembly: AssemblyVersion("1.1.0.0")]
 namespace ApplePlayer {
  public class Player {
   public Window Window;
@@ -37,6 +38,7 @@ namespace ApplePlayer {
   void Button(string name,Action action){Get<Button>(name).Click+=delegate{action();};}
   public Player(string path) {
    store=path;Data=Library.Load(path);
+   Theme.Apply(Data.Dark);
    if(!Application.Current.Resources.Contains("AppleScrollBar"))using(var styles=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.ControlStyles.xaml"))Application.Current.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Load(styles));
    using(var s=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.MainWindow.xaml"))Window=(Window)XamlReader.Load(s);
    using(var icon=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.Icon"))Window.Icon=new IconBitmapDecoder(icon,BitmapCreateOptions.None,BitmapCacheOption.OnLoad).Frames.OrderByDescending(frame=>frame.PixelWidth).First();
@@ -51,6 +53,7 @@ namespace ApplePlayer {
    Button("CloseWindowButton",delegate{Window.Close();});
    Button("MinimizeWindowButton",delegate{Window.WindowState=WindowState.Minimized;});
    Button("MaximizeWindowButton",delegate{Window.WindowState=Window.WindowState==WindowState.Maximized?WindowState.Normal:WindowState.Maximized;});
+   Button("ThemeButton",delegate{Data.Dark=!Data.Dark;ApplyTheme();Save();});
    Button("AddButton",AddDialog);Button("MoreAddButton",AddDialog);Button("FolderButton",FolderDialog);
    Button("DefaultAppsButton",OpenDefaultApps);
    Button("ClearLibraryButton",delegate{Get<Border>("ClearLibraryOverlay").Visibility=Visibility.Visible;Get<Button>("CancelClearLibraryButton").Focus();});
@@ -78,9 +81,9 @@ namespace ApplePlayer {
    Audio.MediaEnded+=delegate{Next(true);};
    Audio.MediaFailed+=delegate(object o,ExceptionEventArgs e){Playing=false;Opened=false;Audio.Close();Get<Button>("PlayButton").Content="▶";Label("Status","Не удалось воспроизвести файл. Проверьте доступность и формат.");};
    timer.Interval=TimeSpan.FromMilliseconds(250);timer.Tick+=delegate{if(!Opened)return;if(!Get<Slider>("Seek").IsMouseCaptureWithin){updating=true;Get<Slider>("Seek").Value=Audio.Position.TotalSeconds;updating=false;}Label("Elapsed",Time(Audio.Position.TotalSeconds));};timer.Start();
-   Window.Closing+=delegate(object sender,System.ComponentModel.CancelEventArgs closing){try{sizeSave.Stop();RememberWindowSize();Data.Current=Current==null?null:Current.Path;Data.Save(store);}catch(Exception e){if(MessageBox.Show("Не удалось сохранить медиатеку: "+e.Message+"\nЗакрыть плеер?","Apple Player",MessageBoxButton.YesNo,MessageBoxImage.Warning)==MessageBoxResult.No)closing.Cancel=true;}};
+   Window.Closing+=delegate(object sender,System.ComponentModel.CancelEventArgs closing){try{sizeSave.Stop();RememberWindowSize();Data.Current=Current==null?null:Current.Path;Data.Save(store);}catch(Exception e){if(MessageBox.Show("Не удалось сохранить медиатеку: "+e.Message+"\nЗакрыть плеер?","Apple MP3 Player",MessageBoxButton.YesNo,MessageBoxImage.Warning)==MessageBoxResult.No)closing.Cancel=true;}};
    Window.Closed+=delegate{timer.Stop();sizeSave.Stop();Audio.Close();};
-   Current=Data.Tracks.FirstOrDefault(t=>t.Path==Data.Current);if(Current!=null)ShowTrack();Refresh();Modes();
+   Current=Data.Tracks.FirstOrDefault(t=>t.Path==Data.Current);if(Current!=null)ShowTrack();ApplyTheme();
   }
   public static string Time(double seconds){var t=TimeSpan.FromSeconds(Math.Max(0,seconds));return ((int)t.TotalMinutes)+":"+t.Seconds.ToString("00");}
   public List<Track> Visible() {string q=Get<TextBox>("Search").Text.Trim();return Data.Tracks.Where(t=>(!favorites||t.Favorite)&&(q.Length==0||(t.Title+" "+t.Artist+" "+t.Album).IndexOf(q,StringComparison.CurrentCultureIgnoreCase)>=0)).ToList();}
@@ -89,7 +92,7 @@ namespace ApplePlayer {
    Get<StackPanel>("Empty").Visibility=list.Count==0?Visibility.Visible:Visibility.Collapsed;
    Label("PageTitle",favorites?"Избранное":"Вся музыка");Label("CountLabel",list.Count+" треков · Ваша личная коллекция");
    Label("EmptyTitle",Data.Tracks.Count==0?"Здесь будет ваша музыка":"Треки не найдены");Label("EmptyHint",Data.Tracks.Count==0?"Перетащите музыку сюда или добавьте файлы":"Измените поиск или добавьте треки в избранное");
-   Get<Button>("LibraryButton").Background=Brush(favorites?"#00000000":"#E3E3EB");Get<Button>("FavoritesButton").Background=Brush(favorites?"#E3E3EB":"#00000000");
+   Get<Button>("LibraryButton").Background=favorites?Brushes.Transparent:Theme.Get("Navigation");Get<Button>("FavoritesButton").Background=favorites?Theme.Get("Navigation"):Brushes.Transparent;
    Get<Button>("ClearLibraryButton").IsEnabled=Data.Tracks.Count>0||importing;
   }
   public async Task Import(IEnumerable<string> paths) {
@@ -139,13 +142,13 @@ namespace ApplePlayer {
    ShowTrack();Refresh();Get<Border>("ClearLibraryOverlay").Visibility=Visibility.Collapsed;
    Get<Button>("AddButton").Focus();Label("Status","Медиатека очищена. Музыкальные файлы сохранены на диске.");Save();
   }
-  public void OpenDefaultApps(){try{Process.Start(new ProcessStartInfo(DefaultAppsUri){UseShellExecute=true});Label("Status","В настройках Windows выберите Apple Player для музыкальных файлов и подтвердите выбор.");}catch(Exception e){Label("Status","Откройте Параметры Windows → Приложения → Приложения по умолчанию. "+e.Message);}}
+  public void OpenDefaultApps(){try{Process.Start(new ProcessStartInfo(DefaultAppsUri){UseShellExecute=true});Label("Status","В настройках Windows выберите Apple MP3 Player для музыкальных файлов и подтвердите выбор.");}catch(Exception e){Label("Status","Откройте Параметры Windows → Приложения → Приложения по умолчанию. "+e.Message);}}
   public void Remove(Track t){if(t==null)return;if(t==Current){Audio.Close();Current=null;Playing=false;Opened=false;Get<Button>("PlayButton").Content="▶";ShowTrack();updating=true;Get<Slider>("Seek").Value=0;updating=false;Label("Elapsed","0:00");Label("Duration","0:00");}Data.Tracks.Remove(t);history.RemoveAll(x=>x==t);Refresh();Save();Label("Status","Трек убран из медиатеки. Файл сохранён на диске.");}
   void ShowTrack(){Label("NowTitle",Current==null?"Поймайте настроение":Current.Title);Label("NowArtist",Current==null?"Выберите любимый трек":Current.Artist);Label("NowAlbum",Current==null?"":Current.Album);Label("MiniTitle",Current==null?"Музыка начинается здесь":Current.Title);Label("MiniArtist",Current==null?"Добавьте первый трек":Current.Artist);Get<Button>("HeartButton").Content=Current!=null&&Current.Favorite?"♥   В избранном":"♡   В избранное";Get<Image>("Cover").Source=null;
    if(Current!=null)try{byte[] bytes=Tags.Cover(Current.Path);if(bytes!=null)using(var s=new MemoryStream(bytes)){var img=new BitmapImage();img.BeginInit();img.CacheOption=BitmapCacheOption.OnLoad;img.DecodePixelWidth=600;img.StreamSource=s;img.EndInit();img.Freeze();Get<Image>("Cover").Source=img;}}catch{}
   }
-  static Brush Brush(string hex){return (Brush)new BrushConverter().ConvertFromString(hex);}
-  void Modes(){Get<Button>("ShuffleButton").Foreground=Brush(Data.Shuffle?"#FA3559":"#565661");Get<Button>("ShuffleButton").Background=Brush(Data.Shuffle?"#FDE7ED":"#00000000");Get<Button>("RepeatButton").Foreground=Brush(Data.Repeat>0?"#FA3559":"#565661");Get<Button>("RepeatButton").Content=Data.Repeat==2?"↻₁":"↻";Get<Button>("RepeatButton").ToolTip="Повтор: "+(Data.Repeat==0?"выключен":Data.Repeat==1?"все треки":"один трек");}
+  public void ApplyTheme(){Theme.Apply(Data.Dark);Get<Button>("ThemeButton").Content=Data.Dark?"☀  Светлая":"◐  Тёмная";Refresh();Modes();}
+  void Modes(){Get<Button>("ShuffleButton").Foreground=Theme.Get(Data.Shuffle?"Accent":"ControlText");Get<Button>("ShuffleButton").Background=Data.Shuffle?Theme.Get("Selected"):Brushes.Transparent;Get<Button>("RepeatButton").Foreground=Theme.Get(Data.Repeat>0?"Accent":"ControlText");Get<Button>("RepeatButton").Content=Data.Repeat==2?"↻₁":"↻";Get<Button>("RepeatButton").ToolTip="Повтор: "+(Data.Repeat==0?"выключен":Data.Repeat==1?"все треки":"один трек");}
   public void RememberWindowSize(){
    if(!Window.IsLoaded||Window.WindowState==WindowState.Minimized)return;
    Rect bounds=Window.WindowState==WindowState.Maximized?Window.RestoreBounds:new Rect(0,0,Window.ActualWidth,Window.ActualHeight);
@@ -162,7 +165,7 @@ namespace ApplePlayer {
   [STAThread] public static int Main(string[] args) {
    if(args.Length>0&&args[0]=="--self-test")return Tests.Run(args.Skip(1).ToArray());
    var app=new Application();
-   app.DispatcherUnhandledException+=delegate(object s,DispatcherUnhandledExceptionEventArgs e){MessageBox.Show("Ошибка: "+e.Exception.Message,"Apple Player",MessageBoxButton.OK,MessageBoxImage.Warning);e.Handled=true;};
+   app.DispatcherUnhandledException+=delegate(object s,DispatcherUnhandledExceptionEventArgs e){MessageBox.Show("Ошибка: "+e.Exception.Message,"Apple MP3 Player",MessageBoxButton.OK,MessageBoxImage.Warning);e.Handled=true;};
    string store=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ApplePlayer","library.json");
    var player=new Player(store);player.Window.Loaded+=async delegate{if(args.Length>0){await player.Import(args);var first=player.Data.Tracks.FirstOrDefault(t=>String.Equals(t.Path,Path.GetFullPath(args[0]),StringComparison.OrdinalIgnoreCase));if(first!=null)player.Play(first);}};app.Run(player.Window);return 0;
   }

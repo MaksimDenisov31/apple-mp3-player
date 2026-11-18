@@ -36,6 +36,8 @@ namespace ApplePlayer {
      var tag=Tags.Read(fixture);Check(tag.Title=="Тестовый трек"&&tag.Artist=="Apple Player Test"&&tag.Album=="Проверка", "ID3 UTF-8/UTF-16 metadata");Check(Tags.Cover(fixture)!=null,"Embedded cover parsed");
      string state=Path.Combine(root,"test-library.json");if(File.Exists(state))File.Move(state,state+"."+Guid.NewGuid()+".old");
      p=new Player(state);p.Window.Show();await Task.Delay(300);
+     Check(p.Window.Title=="Apple MP3 Player","Renamed player window title");
+     Check(!p.Data.Dark,"New and older libraries default to light theme");
      var chrome=WindowChrome.GetWindowChrome(p.Window);
      Check(p.Window.WindowStyle==WindowStyle.None&&chrome!=null&&!chrome.UseAeroCaptionButtons,"Native caption replaced by custom Apple title bar");
      Check(p.Window.Icon is BitmapSource&&((BitmapSource)p.Window.Icon).PixelWidth==256,"Window uses full-resolution embedded music icon");
@@ -71,6 +73,21 @@ namespace ApplePlayer {
      p.Get<Slider>("Volume").Value=0;
      p.Window.UpdateLayout();await Task.Delay(250);
      var bmp=new RenderTargetBitmap((int)p.Window.ActualWidth,(int)p.Window.ActualHeight,96,96,PixelFormats.Pbgra32);bmp.Render(p.Window);var enc=new PngBitmapEncoder();enc.Frames.Add(BitmapFrame.Create(bmp));using(var file=File.Create(Path.Combine(root,"player.png")))enc.Save(file);Check(File.Exists(Path.Combine(root,"player.png")),"UI screenshot rendered");
+     string currentPath=p.Current.Path;int trackCount=p.Data.Tracks.Count;double currentWidth=p.Window.ActualWidth;
+     p.Get<Button>("ThemeButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));p.Window.UpdateLayout();await Task.Delay(150);
+     Check(p.Data.Dark&&((SolidColorBrush)p.Window.Background).Color.R<50,"Theme button activates dark window palette");
+     Check(((SolidColorBrush)p.Get<TextBox>("Search").Foreground).Color.R>200&&((SolidColorBrush)p.Get<ListBox>("Tracks").Foreground).Color.R>200,"Search and playlist remain readable in dark theme");
+     Check(Library.Load(state).Dark,"Theme preference saved immediately");
+     Check(p.Current.Path==currentPath&&p.Data.Tracks.Count==trackCount&&Math.Abs(p.Window.ActualWidth-currentWidth)<1,"Theme switch preserves music selection library and window size");
+     Snapshot(p.Window,Path.Combine(root,"player-dark.png"));
+     var darkMenu=p.Get<ListBox>("Tracks").ContextMenu;darkMenu.PlacementTarget=p.Get<ListBox>("Tracks");darkMenu.IsOpen=true;await Task.Delay(100);darkMenu.UpdateLayout();
+     Check(((SolidColorBrush)darkMenu.Background).Color.R<60&&((SolidColorBrush)darkMenu.Foreground).Color.R>200,"Context menu follows dark palette");Snapshot(darkMenu,Path.Combine(root,"context-menu-dark.png"));
+     p.Get<Button>("ThemeButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));p.Window.UpdateLayout();await Task.Delay(100);
+     Check(!p.Data.Dark&&((SolidColorBrush)darkMenu.Background).Color.R>230,"Open context menu updates when switching back to light");
+     p.Get<Button>("ThemeButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));darkMenu.IsOpen=false;
+     p.Get<Button>("ClearLibraryButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));p.Window.UpdateLayout();await Task.Delay(100);Snapshot(p.Window,Path.Combine(root,"clear-library-dark.png"));
+     Check(((SolidColorBrush)((Border)p.Get<Border>("ClearLibraryOverlay").Child).Background).Color.R<50,"Clear confirmation follows dark palette");p.Get<Button>("CancelClearLibraryButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+     var darkTip=new ToolTip{Content="Переключить тему",PlacementTarget=p.Get<Button>("ThemeButton")};darkTip.IsOpen=true;await Task.Delay(100);darkTip.UpdateLayout();Snapshot(darkTip,Path.Combine(root,"tooltip-dark.png"));Check(((SolidColorBrush)darkTip.Background).Color.R<90,"Tooltip follows dark palette");darkTip.IsOpen=false;
      var list=p.Get<ListBox>("Tracks");int originalCount=p.Data.Tracks.Count;
      for(int i=0;i<70;i++)p.Data.Tracks.Add(new Track{Path=fixture,Title="Проверка прокрутки · "+(i+1).ToString("00"),Artist="Тестовая медиатека",Album="Длинный список"});
      p.Refresh();p.Window.UpdateLayout();await Task.Delay(150);
@@ -139,6 +156,7 @@ namespace ApplePlayer {
      var sized=Library.Load(state);Check(Math.Abs(sized.WindowWidth-savedWidth)<1&&Math.Abs(sized.WindowHeight-savedHeight)<1,"Resize automatically persists latest normal dimensions");
      bool closed=false;p.Window.Closed+=delegate{closed=true;};p.Get<Button>("CloseWindowButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Check(closed&&File.Exists(state),"Red button closes window and saves library");p=null;
      p=new Player(state);p.Window.Show();await Task.Delay(200);
+     Check(p.Data.Dark&&((SolidColorBrush)p.Window.Background).Color.R<50,"Dark theme restored on application restart");
      Check(Math.Abs(p.Window.ActualWidth-savedWidth)<1&&Math.Abs(p.Window.ActualHeight-savedHeight)<1&&p.Data.Tracks.Count==1,"Reopened player restores custom size and music library");
      p.Get<Button>("MaximizeWindowButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));await Task.Delay(650);sized=Library.Load(state);
      Check(sized.WindowMaximized&&Math.Abs(sized.WindowWidth-savedWidth)<1&&Math.Abs(sized.WindowHeight-savedHeight)<1,"Maximize persists state while retaining normal restore dimensions");
