@@ -4,7 +4,7 @@ using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
 
-namespace ApplePlayer {
+namespace Apple.MP3.Player {
  // Keep the native resize/snap behavior, while painting our own caption.
  public sealed class WindowFrame {
   readonly Window window;

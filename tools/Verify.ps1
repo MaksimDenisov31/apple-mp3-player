@@ -18,7 +18,7 @@ foreach ($extension in @('wav','m4a','aac','wma','flac')) {
  & $FFmpeg -hide_banner -loglevel error -y -f lavfi -i 'sine=frequency=440:duration=3' ('.local\tests\sample.' + $extension)
  if ($LASTEXITCODE -ne 0) { throw ('Audio generation failed: ' + $extension) }
 }
-$process = Start-Process -FilePath .\bin\AppleMP3Player.exe -ArgumentList '--self-test .local/tests' -PassThru
+$process = Start-Process -FilePath '.\bin\Apple MP3 Player.exe' -ArgumentList '--self-test .local/tests' -PassThru
 if (-not $process.WaitForExit(45000)) { throw 'Functional checks timed out' }
 Get-Content .local\tests\results.txt -Encoding UTF8
 if ($process.ExitCode -ne 0) { throw 'Functional checks failed' }

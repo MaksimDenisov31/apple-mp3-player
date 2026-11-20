@@ -12,7 +12,7 @@ using System.Windows.Shell;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 
-namespace ApplePlayer {
+namespace Apple.MP3.Player {
  public static class Tests {
   static StreamWriter log;
   [StructLayout(LayoutKind.Sequential)]struct NativeRect{public int Left,Top,Right,Bottom;}
@@ -37,11 +37,12 @@ namespace ApplePlayer {
      string state=Path.Combine(root,"test-library.json");if(File.Exists(state))File.Move(state,state+"."+Guid.NewGuid()+".old");
      p=new Player(state);p.Window.Show();await Task.Delay(300);
      Check(p.Window.Title=="Apple MP3 Player","Renamed player window title");
+     Check(Path.GetFileName(System.Reflection.Assembly.GetExecutingAssembly().Location)=="Apple MP3 Player.exe","Executable has the exact spaced product name");
      Check(!p.Data.Dark,"New and older libraries default to light theme");
      var chrome=WindowChrome.GetWindowChrome(p.Window);
      Check(p.Window.WindowStyle==WindowStyle.None&&chrome!=null&&!chrome.UseAeroCaptionButtons,"Native caption replaced by custom Apple title bar");
      Check(p.Window.Icon is BitmapSource&&((BitmapSource)p.Window.Icon).PixelWidth==256,"Window uses full-resolution embedded music icon");
-     using(var icon=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.Icon")){var decoder=new IconBitmapDecoder(icon,BitmapCreateOptions.None,BitmapCacheOption.OnLoad);Check(decoder.Frames.Count==9&&decoder.Frames.Any(f=>f.PixelWidth==16)&&decoder.Frames.Any(f=>f.PixelWidth==256),"Music ICO includes nine sizes from 16 to 256 pixels");}
+     using(var icon=System.Reflection.Assembly.GetExecutingAssembly().GetManifestResourceStream("Apple.MP3.Player.Icon")){var decoder=new IconBitmapDecoder(icon,BitmapCreateOptions.None,BitmapCacheOption.OnLoad);Check(decoder.Frames.Count==9&&decoder.Frames.Any(f=>f.PixelWidth==16)&&decoder.Frames.Any(f=>f.PixelWidth==256),"Music ICO includes nine sizes from 16 to 256 pixels");}
      Check(HitTest(p.Window,300,23)==2,"Custom title bar supports native window dragging");
      Check(HitTest(p.Window,29,23)==1,"Traffic light buttons receive client clicks");
      Check(HitTest(p.Window,2,200)==10&&HitTest(p.Window,p.Window.ActualWidth-2,p.Window.ActualHeight-2)==17,"Native edge and corner resizing remain available");
@@ -128,7 +129,7 @@ namespace ApplePlayer {
       for(int i=0;i<50&&!p.Opened;i++)await Task.Delay(100);await Task.Delay(250);
       Check(p.Opened&&p.Audio.Position.TotalSeconds>0.1,"Playback advances for "+extension);p.Toggle();
      }
-     Check(Player.DefaultAppsUri=="ms-settings:defaultapps?registeredAppUser=ApplePlayer"&&p.Get<Button>("DefaultAppsButton")!=null,"Default player button targets registered per-user app");
+     Check(Player.DefaultAppsUri=="ms-settings:defaultapps?registeredAppUser=Apple%20MP3%20Player"&&p.Get<Button>("DefaultAppsButton")!=null,"Default player button targets registered per-user app");
      p.Toggle();int beforeClear=p.Data.Tracks.Count;p.Get<Button>("ClearLibraryButton").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
      Check(p.Get<Border>("ClearLibraryOverlay").Visibility==Visibility.Visible&&p.Data.Tracks.Count==beforeClear,"Clear button asks for confirmation without removing tracks");
      p.Window.UpdateLayout();await Task.Delay(150);Snapshot(p.Window,Path.Combine(root,"clear-library.png"));
@@ -176,6 +177,18 @@ namespace ApplePlayer {
      p=new Player(legacy);p.Window.Show();await Task.Delay(150);
      Check(p.Window.WindowState==WindowState.Normal&&p.Window.Width>=p.Window.MinWidth&&p.Window.Height>=p.Window.MinHeight,"Older libraries without size fields use valid defaults");
      Check(Math.Abs(p.Data.Volume-0.42)<0.001&&p.Data.Repeat==1&&p.Data.Shuffle,"Window size migration preserves existing playback settings");p.Window.Close();p=null;
+     string migrationRoot=Path.Combine(root,"migration-"+Guid.NewGuid().ToString("N"));
+     string previousFile=Path.Combine(migrationRoot,UpgradeCompatibility.PreviousDataFolder,"library.json");
+     var previousLibrary=new Library{Dark=true,Volume=0.37,WindowWidth=1037,WindowHeight=743,WindowMaximized=true,Current=fixture};
+     previousLibrary.Tracks.Add(new Track{Path=fixture,Title="Migrated song",Artist="Test",Album="Test",Favorite=true});previousLibrary.Save(previousFile);previousLibrary.Save(previousFile);
+     string migrated=UpgradeCompatibility.MigrateLibrary(migrationRoot);var migratedLibrary=Library.Load(migrated);
+     Check(Path.GetDirectoryName(migrated)==Path.Combine(migrationRoot,"Apple MP3 Player"),"Library migrated into exact new product folder");
+     Check(migratedLibrary.Tracks.Count==1&&migratedLibrary.Tracks[0].Favorite&&migratedLibrary.Dark&&migratedLibrary.WindowMaximized&&migratedLibrary.WindowWidth==1037&&Math.Abs(migratedLibrary.Volume-0.37)<0.001,"Migration preserves music favorites theme volume and window dimensions");
+     Check(File.Exists(previousFile)&&File.Exists(migrated+".bak"),"Migration preserves old data and copies backup");
+     migratedLibrary.Volume=0.62;migratedLibrary.Save(migrated);previousLibrary.Volume=0.1;previousLibrary.Save(previousFile);UpgradeCompatibility.MigrateLibrary(migrationRoot);
+     Check(Math.Abs(Library.Load(migrated).Volume-0.62)<0.001,"Repeated startup never overwrites newer migrated settings");
+     string freshRoot=Path.Combine(root,"fresh-"+Guid.NewGuid().ToString("N"));
+     Check(UpgradeCompatibility.MigrateLibrary(freshRoot)==Path.Combine(freshRoot,"Apple MP3 Player","library.json"),"Fresh install uses canonical product data folder");
      File.WriteAllText(Path.Combine(root,"broken.mp3"),"invalid audio");Check(Tags.Read(Path.Combine(root,"broken.mp3")).Title=="broken","Malformed metadata handled");
      File.WriteAllText(Path.Combine(root,"corrupt.json"),"broken");Check(Library.Load(Path.Combine(root,"corrupt.json")).Tracks.Count==0,"Invalid settings handled");
      exit=0;log.WriteLine("ALL CHECKS PASSED");

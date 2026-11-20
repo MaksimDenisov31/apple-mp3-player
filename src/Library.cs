@@ -6,7 +6,7 @@ using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
 
-namespace ApplePlayer {
+namespace Apple.MP3.Player {
  public static class AudioFormats {
   public static readonly string[] Extensions={".mp3",".wav",".m4a",".aac",".wma",".flac"};
   public static bool Supports(string path){return Extensions.Contains(System.IO.Path.GetExtension(path),StringComparer.OrdinalIgnoreCase);}

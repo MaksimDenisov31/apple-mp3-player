@@ -1,7 +1,7 @@
 using System.Windows;
 using System.Windows.Media;
 
-namespace ApplePlayer {
+namespace Apple.MP3.Player {
  public static class Theme {
   static readonly string[,] colors={
    {"Surface","#FAFAFC","#1C1C1E"},

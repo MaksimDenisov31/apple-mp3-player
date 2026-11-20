@@ -16,8 +16,8 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Apple MP3 Player")]
 [assembly: AssemblyProduct("Apple MP3 Player")]
-[assembly: AssemblyVersion("1.1.0.0")]
-namespace ApplePlayer {
+[assembly: AssemblyVersion("1.1.1.0")]
+namespace Apple.MP3.Player {
  public class Player {
   public Window Window;
   public readonly MediaPlayer Audio=new MediaPlayer();
@@ -28,7 +28,7 @@ namespace ApplePlayer {
   readonly string store;
   bool updating, favorites, importing;
   int importRevision;
-  public const string DefaultAppsUri="ms-settings:defaultapps?registeredAppUser=ApplePlayer";
+  public const string DefaultAppsUri="ms-settings:defaultapps?registeredAppUser=Apple%20MP3%20Player";
   readonly Random random=new Random();
   readonly DispatcherTimer timer=new DispatcherTimer();
   readonly DispatcherTimer sizeSave=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(400)};
@@ -39,9 +39,9 @@ namespace ApplePlayer {
   public Player(string path) {
    store=path;Data=Library.Load(path);
    Theme.Apply(Data.Dark);
-   if(!Application.Current.Resources.Contains("AppleScrollBar"))using(var styles=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.ControlStyles.xaml"))Application.Current.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Load(styles));
-   using(var s=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.MainWindow.xaml"))Window=(Window)XamlReader.Load(s);
-   using(var icon=Assembly.GetExecutingAssembly().GetManifestResourceStream("ApplePlayer.Icon"))Window.Icon=new IconBitmapDecoder(icon,BitmapCreateOptions.None,BitmapCacheOption.OnLoad).Frames.OrderByDescending(frame=>frame.PixelWidth).First();
+   if(!Application.Current.Resources.Contains("AppleScrollBar"))using(var styles=Assembly.GetExecutingAssembly().GetManifestResourceStream("Apple.MP3.Player.ControlStyles.xaml"))Application.Current.Resources.MergedDictionaries.Add((ResourceDictionary)XamlReader.Load(styles));
+   using(var s=Assembly.GetExecutingAssembly().GetManifestResourceStream("Apple.MP3.Player.MainWindow.xaml"))Window=(Window)XamlReader.Load(s);
+   using(var icon=Assembly.GetExecutingAssembly().GetManifestResourceStream("Apple.MP3.Player.Icon"))Window.Icon=new IconBitmapDecoder(icon,BitmapCreateOptions.None,BitmapCacheOption.OnLoad).Frames.OrderByDescending(frame=>frame.PixelWidth).First();
    new WindowFrame(Window);
    Rect workArea=SystemParameters.WorkArea;
    Window.Width=Math.Max(Window.MinWidth,Math.Min(Data.WindowWidth>0?Data.WindowWidth:Window.Width,Math.Max(Window.MinWidth,workArea.Width)));
@@ -166,7 +166,7 @@ namespace ApplePlayer {
    if(args.Length>0&&args[0]=="--self-test")return Tests.Run(args.Skip(1).ToArray());
    var app=new Application();
    app.DispatcherUnhandledException+=delegate(object s,DispatcherUnhandledExceptionEventArgs e){MessageBox.Show("Ошибка: "+e.Exception.Message,"Apple MP3 Player",MessageBoxButton.OK,MessageBoxImage.Warning);e.Handled=true;};
-   string store=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"ApplePlayer","library.json");
+   string store=UpgradeCompatibility.DataFile();
    var player=new Player(store);player.Window.Loaded+=async delegate{if(args.Length>0){await player.Import(args);var first=player.Data.Tracks.FirstOrDefault(t=>String.Equals(t.Path,Path.GetFullPath(args[0]),StringComparison.OrdinalIgnoreCase));if(first!=null)player.Play(first);}};app.Run(player.Window);return 0;
   }
  }
